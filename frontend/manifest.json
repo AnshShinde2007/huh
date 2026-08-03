@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Huh?",
+  "version": "1.0.0",
+  "description": "See something you don't know? Huh?",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "src/content.tsx"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*",
+    "https://api.x.ai/*",
+    "https://api.groq.com/*"
+  ]
+}

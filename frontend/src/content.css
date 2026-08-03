@@ -1,0 +1,255 @@
+/* src/content.css */
+
+:host {
+  /* Scoped CSS variables inside Shadow DOM */
+  --huh-font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --huh-bg-card: rgba(17, 24, 39, 0.95); /* Dark background by default for premium dictionary contrast */
+  --huh-text-title: #f9fafb;
+  --huh-text-subtitle: #a5b4fc; /* soft indigo tint */
+  --huh-text-desc: #d1d5db;
+  --huh-text-muted: #9ca3af;
+  
+  --huh-accent: #6366f1;
+  --huh-accent-hover: #4f46e5;
+  --huh-accent-light: rgba(99, 102, 241, 0.15);
+  --huh-border: rgba(255, 255, 255, 0.08);
+  
+  --huh-radius-sm: 6px;
+  --huh-radius-md: 12px;
+  --huh-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  
+  font-family: var(--huh-font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--huh-text-desc);
+}
+
+/* Float trigger button styling */
+.huh-trigger-btn {
+  position: absolute;
+  z-index: 2147483647;
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  transform: translateY(-8px);
+  animation: huh-bounceIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.huh-trigger-btn:hover {
+  transform: translateY(-9px) scale(1.05);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
+}
+
+.huh-trigger-btn:active {
+  transform: translateY(-8px) scale(0.95);
+}
+
+/* Card container styling */
+.huh-card {
+  position: absolute;
+  z-index: 2147483646;
+  width: 290px;
+  background-color: var(--huh-bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--huh-border);
+  border-radius: var(--huh-radius-md);
+  box-shadow: var(--huh-shadow);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transform: translateY(8px);
+  animation: huh-slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.huh-card * {
+  box-sizing: border-box;
+}
+
+/* Close button */
+.huh-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--huh-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.huh-close-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--huh-text-title);
+}
+
+/* Header contents */
+.huh-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 20px; /* space for close button */
+}
+
+.huh-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--huh-text-title);
+  word-break: break-word;
+}
+
+.huh-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.huh-type-badge {
+  background-color: var(--huh-accent-light);
+  color: var(--huh-text-subtitle);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-weight: 600;
+}
+
+.huh-subtitle {
+  color: var(--huh-text-muted);
+  font-weight: 450;
+}
+
+/* Divider */
+.huh-divider {
+  height: 1px;
+  background-color: var(--huh-border);
+  margin: 4px 0;
+}
+
+/* Description body */
+.huh-description {
+  font-size: 13px;
+  color: var(--huh-text-desc);
+  line-height: 1.45;
+}
+
+/* Footer / metadata cache indicator */
+.huh-footer {
+  font-size: 10px;
+  color: var(--huh-text-muted);
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* Skeleton Loading State */
+.huh-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.huh-shimmer {
+  background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
+  background-size: 200% 100%;
+  animation: huh-shimmer 1.5s infinite linear;
+  border-radius: 4px;
+}
+
+.huh-skeleton-title {
+  height: 16px;
+  width: 60%;
+}
+
+.huh-skeleton-badge {
+  height: 12px;
+  width: 30%;
+}
+
+.huh-skeleton-desc-1 {
+  height: 12px;
+  width: 95%;
+  margin-top: 6px;
+}
+
+.huh-skeleton-desc-2 {
+  height: 12px;
+  width: 90%;
+}
+
+.huh-skeleton-desc-3 {
+  height: 12px;
+  width: 75%;
+}
+
+/* Error State UI */
+.huh-error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 12px 6px;
+  gap: 10px;
+}
+
+.huh-error-icon {
+  font-size: 24px;
+}
+
+.huh-error-text {
+  font-size: 12px;
+  color: var(--huh-text-desc);
+}
+
+.huh-retry-btn {
+  background-color: var(--huh-accent);
+  color: white;
+  border: none;
+  border-radius: var(--huh-radius-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.huh-retry-btn:hover {
+  background-color: var(--huh-accent-hover);
+}
+
+/* Animations */
+@keyframes huh-bounceIn {
+  0% { opacity: 0; transform: translateY(0) scale(0.3); }
+  50% { opacity: 0.9; transform: translateY(-10px) scale(1.1); }
+  70% { transform: translateY(-7px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(-8px) scale(1); }
+}
+
+@keyframes huh-slideIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(8px); }
+}
+
+@keyframes huh-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
