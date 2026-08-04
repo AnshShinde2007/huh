@@ -123,18 +123,26 @@ async function callAIProvider(
     throw new Error(`API Key for ${provider} is missing. Please open the Huh? extension popup to configure your API key.`);
   }
 
-  const prompt = `You are Huh?, a browser extension acting as a universal contextual dictionary.
-Analyze the following highlighted text and the surrounding context:
+  const prompt = `You are given text selected by a user while browsing a webpage.
 
-Highlighted text: "${text}"
+Determine what the selected text refers to using the surrounding context.
+
+Explain what it is or what it means specifically in this context.
+
+If the selected text is ambiguous, prioritize the interpretation supported by the surrounding context.
+
+Be concise. The user wants to understand the term without leaving the webpage.
+
+Do not summarize the surrounding context itself. It exists only to help identify and explain the selected text.
+
+Selected text: "${text}"
 Surrounding context: "${context}"
 
-Explain WHAT it is / WHAT it does in a structured format.
-Constraints:
+Respond in a structured format with the following fields:
+- Title: The canonical name or title of the entity (e.g. "React", "Apple Inc.", "Inference").
 - Subtitle: A brief 2-3 word classification subtitle (e.g. "Container orchestration" for Kubernetes).
-- Description: 1-3 sentences, strictly under 60 words. Avoid historical trivia, filler, or prompt meta-text.
-- Disambiguation: Use the surrounding context to resolve ambiguity.
-- Category (Type): Classify the entity into one of these exact categories: Word, Company, Person, Technology, Technical concept, Acronym, Organization, Product, Place, General concept, Unknown.`;
+- Description: 1-3 sentences, strictly under 60 words. Avoid historical trivia, filler, or prompt meta-text. Use the surrounding context to give a context-specific explanation.
+- Type: Classify the entity into exactly one of these categories: Word, Company, Person, Technology, Technical concept, Acronym, Organization, Product, Place, General concept, Unknown.`;
 
   if (provider === 'gemini') {
     const selectedModel = model || 'gemini-2.0-flash';

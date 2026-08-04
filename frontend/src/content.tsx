@@ -47,70 +47,131 @@ function FloatingManager() {
     }
   }, []);
 
-  // Helper to extract sentence context
-  const getSurroundingContext = (selection: Selection): string => {
+  // Semantic block-level elements that provide meaningful context
+  const SEMANTIC_CONTEXT_ELEMENTS = new Set([
+    'P', 'LI', 'TD', 'TH', 'BLOCKQUOTE', 'FIGCAPTION', 'CAPTION',
+    'DT', 'DD', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+    'ARTICLE', 'SECTION', 'ASIDE',
+  ]);
+
+  // Hard cap: 500 chars total, split 250 before / 250 after the selection
+  const CONTEXT_MAX_CHARS = 500;
+  const CONTEXT_WINDOW_BEFORE = 250;
+  const CONTEXT_WINDOW_AFTER = 250;
+
+  /**
+   * Walk up the DOM from `startNode` (max `maxLevels` steps) and return the
+   * first element whose tag is a recognised semantic block element.
+   * Falls back to `startNode.parentElement` if nothing is found.
+   */
+  const findSemanticAncestor = (startNode: Node, maxLevels = 6): HTMLElement | null => {
+    let current: Node | null = startNode.nodeType === Node.TEXT_NODE
+      ? startNode.parentElement
+      : startNode as HTMLElement;
+
+    for (let i = 0; i < maxLevels && current; i++) {
+      if (current.nodeType === Node.ELEMENT_NODE && SEMANTIC_CONTEXT_ELEMENTS.has((current as HTMLElement).tagName)) {
+        return current as HTMLElement;
+      }
+      current = current.parentElement;
+    }
+
+    // Fallback: immediate parent of the start node
+    return startNode.nodeType === Node.TEXT_NODE
+      ? (startNode as Text).parentElement
+      : (startNode as HTMLElement);
+  };
+
+  /**
+   * Extract a context window around `selectedText` from `fullText`.
+   * Returns at most CONTEXT_MAX_CHARS characters, centred on the selection,
+   * with whitespace normalised. Falls back to a prefix of fullText if the
+   * selected text cannot be located inside fullText.
+   */
+  const sliceContextWindow = (fullText: string, selectedText: string): string => {
+    // Normalise whitespace in the source text (preserves words, collapses runs)
+    const normalised = fullText.replace(/\s+/g, ' ').trim();
+    const idx = normalised.indexOf(selectedText.trim());
+
+    if (idx === -1) {
+      // Can't locate selection — return a hard-capped prefix as best-effort
+      return normalised.slice(0, CONTEXT_MAX_CHARS);
+    }
+
+    const selEnd = idx + selectedText.trim().length;
+    const start = Math.max(0, idx - CONTEXT_WINDOW_BEFORE);
+    const end = Math.min(normalised.length, selEnd + CONTEXT_WINDOW_AFTER);
+
+    let excerpt = normalised.slice(start, end).trim();
+
+    // Add ellipsis markers so the model knows it's a fragment
+    if (start > 0) excerpt = '…' + excerpt;
+    if (end < normalised.length) excerpt = excerpt + '…';
+
+    return excerpt;
+  };
+
+  /**
+   * Extract surrounding context for a Selection.
+   *
+   * Strategy:
+   * 1. For multi-node selections, use the common ancestor element's text.
+   * 2. For single-node selections, walk up to the nearest semantic ancestor.
+   * 3. Slice a 500-char window centred on the selected text.
+   * 4. Fallback to '' if nothing meaningful can be found.
+   */
+  const extractContext = (selection: Selection): string => {
     try {
       if (selection.rangeCount === 0) return '';
       const range = selection.getRangeAt(0);
-      const node = range.startContainer;
-      const parentElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as HTMLElement);
-      if (!parentElement) return '';
-      
-      const fullText = parentElement.textContent || '';
-      const selectedText = selection.toString();
+      const selectedText = selection.toString().trim();
       if (!selectedText) return '';
-      
-      const index = fullText.indexOf(selectedText);
-      if (index === -1) return fullText.slice(0, 500);
-      
-      // Sentences boundaries finder
-      let sentenceStart = 0;
-      for (let i = index - 1; i >= 0; i--) {
-        if (['.', '!', '?'].includes(fullText[i]) && (i === 0 || /\s/.test(fullText[i + 1]))) {
-          sentenceStart = i + 1;
-          break;
+
+      let sourceElement: HTMLElement | null = null;
+
+      if (range.startContainer === range.endContainer) {
+        // Single text node — walk up for a semantic ancestor
+        sourceElement = findSemanticAncestor(range.startContainer);
+      } else {
+        // Multi-node selection — use the common ancestor which spans all nodes
+        const common = range.commonAncestorContainer;
+        if (common.nodeType === Node.ELEMENT_NODE) {
+          sourceElement = common as HTMLElement;
+        } else {
+          sourceElement = (common as Text).parentElement;
+        }
+        // If the common ancestor is very large (e.g. body/article), prefer
+        // a semantic ancestor of startContainer instead
+        if (sourceElement && !SEMANTIC_CONTEXT_ELEMENTS.has(sourceElement.tagName)) {
+          const semantic = findSemanticAncestor(range.startContainer);
+          if (semantic) sourceElement = semantic;
         }
       }
-      
-      let sentenceEnd = fullText.length;
-      for (let i = index + selectedText.length; i < fullText.length; i++) {
-        if (['.', '!', '?'].includes(fullText[i]) && (i === fullText.length - 1 || /\s/.test(fullText[i + 1]))) {
-          sentenceEnd = i + 1;
-          break;
-        }
-      }
-      
-      const currentSentence = fullText.slice(sentenceStart, sentenceEnd).trim();
-      
-      // Sentence before
-      let prevSentence = '';
-      if (sentenceStart > 0) {
-        let prevStart = 0;
-        for (let i = sentenceStart - 2; i >= 0; i--) {
-          if (['.', '!', '?'].includes(fullText[i]) && (i === 0 || /\s/.test(fullText[i + 1]))) {
-            prevStart = i + 1;
-            break;
-          }
-        }
-        prevSentence = fullText.slice(prevStart, sentenceStart).trim();
-      }
-      
-      // Sentence after
-      let nextSentence = '';
-      if (sentenceEnd < fullText.length) {
-        let nextEnd = fullText.length;
-        for (let i = sentenceEnd + 1; i < fullText.length; i++) {
-          if (['.', '!', '?'].includes(fullText[i]) && (i === fullText.length - 1 || /\s/.test(fullText[i + 1]))) {
-            nextEnd = i + 1;
-            break;
-          }
-        }
-        nextSentence = fullText.slice(sentenceEnd, nextEnd).trim();
-      }
-      
-      const result = [prevSentence, currentSentence, nextSentence].filter(Boolean).join(' ');
-      return result.length > 500 ? result.slice(0, 500) : result;
-    } catch (e) {
+
+      if (!sourceElement) return '';
+
+      const fullText = sourceElement.textContent || '';
+      return sliceContextWindow(fullText, selectedText);
+    } catch {
+      return '';
+    }
+  };
+
+  /**
+   * Extract context from a plain Range (used by the Alt+Click handler which
+   * builds its own range rather than relying on window.getSelection()).
+   */
+  const extractContextFromRange = (range: Range, selectedText: string): string => {
+    try {
+      if (!selectedText) return '';
+
+      // Walk up from the start container to find a semantic ancestor
+      const sourceElement = findSemanticAncestor(range.startContainer);
+      if (!sourceElement) return '';
+
+      const fullText = sourceElement.textContent || '';
+      return sliceContextWindow(fullText, selectedText);
+    } catch {
       return '';
     }
   };
@@ -195,7 +256,7 @@ function FloatingManager() {
         const rect = range.getBoundingClientRect();
         
         setSelectionText(text);
-        setContextText(getSurroundingContext(selection));
+        setContextText(extractContext(selection));
         setSelectionRect({
           left: rect.left,
           top: rect.top,
@@ -261,31 +322,10 @@ function FloatingManager() {
             wordRange.setStart(textNode, wordStart);
             wordRange.setEnd(textNode, wordEnd);
             const rect = wordRange.getBoundingClientRect();
-            
-            // Build context around word
-            const parentElement = textNode.parentElement;
-            const fullParentText = parentElement?.textContent || '';
-            const contextIndex = fullParentText.indexOf(text);
-            const absoluteWordIndex = (contextIndex !== -1 ? contextIndex : 0) + wordStart;
-            
-            // Basic sentence-splitter for Alt+Click context
-            let sentenceStart = 0;
-            for (let i = absoluteWordIndex - 1; i >= 0; i--) {
-              if (['.', '!', '?'].includes(fullParentText[i]) && (i === 0 || /\s/.test(fullParentText[i + 1]))) {
-                sentenceStart = i + 1;
-                break;
-              }
-            }
-            let sentenceEnd = fullParentText.length;
-            for (let i = absoluteWordIndex + word.length; i < fullParentText.length; i++) {
-              if (['.', '!', '?'].includes(fullParentText[i]) && (i === fullParentText.length - 1 || /\s/.test(fullParentText[i + 1]))) {
-                sentenceEnd = i + 1;
-                break;
-              }
-            }
-            
-            const context = fullParentText.slice(sentenceStart, sentenceEnd).trim();
-            
+
+            // Use the shared context extractor (semantic ancestor walking + 500-char cap)
+            const context = extractContextFromRange(wordRange, word);
+
             setSelectionText(word);
             setContextText(context);
             setSelectionRect({
@@ -296,7 +336,7 @@ function FloatingManager() {
               width: rect.width,
               height: rect.height
             });
-            
+
             // Trigger direct lookup bypassing trigger button
             performLookup(word, context);
           } catch (err) {
@@ -329,8 +369,8 @@ function FloatingManager() {
   // Position calculations
   const getTriggerPosition = () => {
     return {
-      left: `${window.scrollX + selectionRect.right}px`,
-      top: `${window.scrollY + selectionRect.bottom}px`
+      left: `${selectionRect.right}px`,
+      top: `${selectionRect.bottom}px`
     };
   };
 
@@ -354,8 +394,8 @@ function FloatingManager() {
     }
     
     return {
-      left: `${window.scrollX + cardX}px`,
-      top: `${window.scrollY + cardY}px`
+      left: `${cardX}px`,
+      top: `${cardY}px`
     };
   };
 
