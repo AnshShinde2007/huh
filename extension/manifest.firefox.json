@@ -7,8 +7,8 @@
     "default_popup": "index.html"
   },
   "background": {
-    "service_worker": "src/background.ts",
-    "type": "module"
+    "service_worker": "service-worker-loader.js",
+    "scripts": ["service-worker-loader.js"]
   },
   "content_scripts": [
     {
@@ -34,5 +34,22 @@
     "https://openrouter.ai/*",
     "https://api.x.ai/*",
     "https://api.groq.com/*"
-  ]
+  ],
+  "externally_connectable": {
+    "matches": [
+      "*://localhost/*",
+      "https://huh-35f08.web.app/*",
+      "https://huh-35f08.firebaseapp.com/*"
+    ]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "extension@huh.app",
+      "data_collection_permissions": {
+        "required": [
+          "websiteContent"
+        ]
+      }
+    }
+  }
 }

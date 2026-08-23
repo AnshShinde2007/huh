@@ -1,18 +1,6 @@
 /// <reference types="chrome" />
 // src/popup.tsx
 import { useState, useEffect } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  GoogleAuthProvider,
-  GithubAuthProvider,
-  type User,
-} from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
 
 // ── Provider config ──────────────────────────────────────────────────────────
 
@@ -37,64 +25,13 @@ const PROVIDER_BRIDGE: Record<ProviderId, { bgId: string; model: string }> = {
   gemini:     { bgId: 'gemini',      model: 'gemini-2.0-flash' },
 };
 
-// ── Firestore helpers ────────────────────────────────────────────────────────
-
-interface CloudSettings {
-  apiKeysMap: Record<string, string>;
-  provider: string;
-  model: string;
-  showTrigger: boolean;
-  enableAltClick: boolean;
-  cardPositionSetting: string;
-}
-
-async function loadCloudSettings(uid: string): Promise<CloudSettings | null> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'settings', 'main'));
-    if (snap.exists()) return snap.data() as CloudSettings;
-  } catch (e) {
-    console.warn('Firestore read failed:', e);
-  }
-  return null;
-}
-
-async function saveCloudSettings(uid: string, settings: CloudSettings): Promise<void> {
-  try {
-    await setDoc(doc(db, 'users', uid, 'settings', 'main'), settings, { merge: true });
-  } catch (e) {
-    console.warn('Firestore write failed:', e);
-  }
-}
-
-// ── Icon components ──────────────────────────────────────────────────────────
-
-function GoogleIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/>
-      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/>
-      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/>
-      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335"/>
-    </svg>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
-    </svg>
-  );
-}
-
 // ── Main Popup ───────────────────────────────────────────────────────────────
 
 export default function Popup() {
-  const [tab, setTab] = useState<'dashboard' | 'signin' | 'byok'>('byok');
+  const [tab, setTab] = useState<'dashboard' | 'byok'>('byok');
 
-  // Firebase auth state
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  // Auth link state
+  const [isLinked, setIsLinked] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // BYOK state
@@ -105,70 +42,17 @@ export default function Popup() {
   const [cacheSize, setCacheSize] = useState(0);
   const [byokStatus, setByokStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  // Signin state
-  const [email, setEmail]           = useState('');
-  const [password, setPassword]     = useState('');
-  const [showPass, setShowPass]     = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [authError, setAuthError]   = useState<string | null>(null);
-  const [authBusy, setAuthBusy]     = useState(false);
-
   // Interaction toggles (persisted, accessible from BYOK tab footer)
   const [showTrigger, setShowTrigger]         = useState(true);
   const [enableAltClick, setEnableAltClick]   = useState(true);
   const [cardPositionSetting, setCardPositionSetting] = useState<'selection' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>('selection');
   const [showToggles, setShowToggles]         = useState(false);
 
-  // ── Firebase auth listener ───────────────────────────────────────────────
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
-      setAuthLoading(false);
-
-      if (user) {
-        // Signed in — load cloud settings and merge
-        setSyncStatus('syncing');
-        const cloud = await loadCloudSettings(user.uid);
-        if (cloud) {
-          // Apply cloud settings to local storage and state
-          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-            chrome.storage.local.set({
-              provider: cloud.provider,
-              model: cloud.model,
-              apiKey: Object.values(cloud.apiKeysMap)[0] || '',
-              apiKeysMap: cloud.apiKeysMap,
-              showTrigger: cloud.showTrigger,
-              enableAltClick: cloud.enableAltClick,
-              cardPositionSetting: cloud.cardPositionSetting,
-            });
-          }
-          setKeysMap(cloud.apiKeysMap || {});
-          if (cloud.showTrigger !== undefined) setShowTrigger(cloud.showTrigger);
-          if (cloud.enableAltClick !== undefined) setEnableAltClick(cloud.enableAltClick);
-          if (cloud.cardPositionSetting) setCardPositionSetting(cloud.cardPositionSetting as any);
-
-          // Resolve current provider from cloud
-          const found = Object.entries(PROVIDER_BRIDGE).find(([, v]) => v.bgId === cloud.provider);
-          if (found) {
-            const prov = found[0] as ProviderId;
-            setProvider(prov);
-            setApiKey(cloud.apiKeysMap[prov] || '');
-          }
-          setSyncStatus('synced');
-        } else {
-          setSyncStatus('idle');
-        }
-        setTab('dashboard');
-      }
-    });
-    return unsub;
-  }, []);
-
   // ── Load saved local state on mount ──────────────────────────────────────
   useEffect(() => {
     if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
     chrome.storage.local.get(
-      ['provider', 'apiKey', 'apiKeysMap', 'showTrigger', 'enableAltClick', 'cardPositionSetting', 'lookupCache'],
+      ['provider', 'apiKey', 'apiKeysMap', 'showTrigger', 'enableAltClick', 'cardPositionSetting', 'lookupCache', 'authToken'],
       (result) => {
         let currentProv: ProviderId = 'claude';
         if (result.provider) {
@@ -191,13 +75,18 @@ export default function Popup() {
         if (result.cardPositionSetting !== undefined) setCardPositionSetting(result.cardPositionSetting);
         if (Array.isArray(result.lookupCache)) setCacheSize(result.lookupCache.length);
 
-        // If an API key is already saved and no cloud user yet, show dashboard
-        if (!authLoading && !firebaseUser && (result.apiKey || Object.keys(loadedMap).length > 0)) {
+        if (result.authToken) {
+          setIsLinked(true);
+          setSyncStatus('synced');
+        }
+
+        // If an API key is already saved, show dashboard
+        if (result.apiKey || Object.keys(loadedMap).length > 0) {
           setTab('dashboard');
         }
       }
     );
-  }, [authLoading, firebaseUser]);
+  }, []);
 
   const handleProviderChange = (newProvider: ProviderId) => {
     setProvider(newProvider);
@@ -240,19 +129,8 @@ export default function Popup() {
     // 1. Save locally
     await new Promise<void>((res) => chrome.storage.local.set(settingsToSave, res));
 
-    // 2. Sync to Firestore if signed in
-    if (firebaseUser) {
-      setSyncStatus('syncing');
-      await saveCloudSettings(firebaseUser.uid, {
-        apiKeysMap: updatedMap,
-        provider: bridge.bgId,
-        model: bridge.model,
-        showTrigger,
-        enableAltClick,
-        cardPositionSetting,
-      });
-      setSyncStatus('synced');
-    }
+    // Note: If linked, we'd ideally sync to Firestore here, but since auth is now
+    // externalized, we only store locally. The landing page could be opened to sync.
 
     const provLabel = PROVIDERS.find(p => p.id === provider)?.label || provider;
     setByokStatus({ ok: true, msg: `Key saved for ${provLabel}!` });
@@ -271,66 +149,11 @@ export default function Popup() {
     });
   };
 
-  // ── Auth actions ──────────────────────────────────────────────────────────
-  const handleGoogleSignIn = async () => {
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-      // onAuthStateChanged will handle the rest
-    } catch (e: any) {
-      setAuthError(e.message || 'Google sign-in failed.');
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const handleGitHubSignIn = async () => {
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      await signInWithPopup(auth, new GithubAuthProvider());
-    } catch (e: any) {
-      setAuthError(e.message || 'GitHub sign-in failed.');
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const handleEmailAuth = async () => {
-    if (!email || !password) {
-      setAuthError('Email and password are required.');
-      return;
-    }
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (e: any) {
-      // Surface a friendly message
-      const msg: string = e.message || '';
-      if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
-        setAuthError('Invalid email or password.');
-      } else if (msg.includes('email-already-in-use')) {
-        setAuthError('Email already in use. Try signing in instead.');
-      } else if (msg.includes('weak-password')) {
-        setAuthError('Password must be at least 6 characters.');
-      } else {
-        setAuthError(msg);
-      }
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
   const handleSignOut = async () => {
-    await signOut(auth);
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) return;
+    await new Promise<void>((res) => chrome.storage.local.remove('authToken', res));
+    setIsLinked(false);
     setSyncStatus('idle');
-    setFirebaseUser(null);
   };
 
   const activeProviderLabel = PROVIDERS.find(p => p.id === provider)?.label || 'Configured Provider';
@@ -362,12 +185,6 @@ export default function Popup() {
           onClick={() => setTab('byok')}
         >
           BYOK
-        </button>
-        <button
-          className={`p-tab ${tab === 'signin' ? 'p-tab--active' : ''}`}
-          onClick={() => setTab('signin')}
-        >
-          {firebaseUser ? 'Account' : 'Sign in'}
         </button>
       </div>
 
@@ -406,10 +223,10 @@ export default function Popup() {
             </div>
 
             {/* Cloud sync badge */}
-            {firebaseUser && (
+            {isLinked && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
                 <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                  ☁️ {firebaseUser.displayName || firebaseUser.email}
+                  ☁️ Linked to huh.app
                 </span>
                 {syncBadge && (
                   <span style={{ fontSize: '10px', color: syncBadge.color, fontWeight: '600' }}>
@@ -519,156 +336,35 @@ export default function Popup() {
             </button>
           </div>
 
+          {!isLinked && (
+            <a
+              href="https://huh.app"
+              target="_blank"
+              rel="noreferrer"
+              className="p-btn p-btn--full"
+              style={{
+                marginTop: '8px',
+                textAlign: 'center',
+                textDecoration: 'none',
+                background: 'linear-gradient(90deg, #6366f1, #a855f7)',
+                border: 'none',
+                color: '#fff',
+                display: 'block'
+              }}
+            >
+              Sign in at huh.app →
+            </a>
+          )}
+
           {/* Sign-out if logged in */}
-          {firebaseUser && (
+          {isLinked && (
             <button
               className="p-social-btn"
               style={{ width: '100%', padding: '8px', fontSize: '12px', marginTop: '2px' }}
               onClick={handleSignOut}
             >
-              Sign out
+              Unlink account
             </button>
-          )}
-        </div>
-      )}
-
-      {/* ── Sign-in / Account panel ── */}
-      {tab === 'signin' && (
-        <div className="p-panel">
-          {firebaseUser ? (
-            /* ── Signed-in account view ── */
-            <>
-              <div style={{
-                background: 'linear-gradient(135deg, rgba(52,211,153,0.1), rgba(99,102,241,0.1))',
-                border: '1px solid rgba(52,211,153,0.3)',
-                borderRadius: '10px',
-                padding: '14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '6px',
-                alignItems: 'center',
-                textAlign: 'center'
-              }}>
-                {firebaseUser.photoURL && (
-                  <img
-                    src={firebaseUser.photoURL}
-                    alt="avatar"
-                    style={{ width: '44px', height: '44px', borderRadius: '50%', border: '2px solid rgba(99,102,241,0.4)' }}
-                  />
-                )}
-                <div style={{ fontSize: '14px', fontWeight: '700', color: '#f3f4f6' }}>
-                  {firebaseUser.displayName || 'Signed in'}
-                </div>
-                <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                  {firebaseUser.email}
-                </div>
-                {syncBadge && (
-                  <div style={{ fontSize: '11px', color: syncBadge.color, fontWeight: '600', marginTop: '2px' }}>
-                    {syncBadge.label}
-                  </div>
-                )}
-              </div>
-
-              <p className="p-footnote" style={{ marginTop: '8px' }}>
-                Your API keys and settings are synced to the cloud.
-              </p>
-
-              <button
-                className="p-btn p-btn--primary p-btn--full"
-                onClick={handleSignOut}
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            /* ── Sign-in form ── */
-            <>
-              <div className="p-social-row">
-                <button
-                  id="btn-google-signin"
-                  className="p-social-btn"
-                  title="Continue with Google"
-                  onClick={handleGoogleSignIn}
-                  disabled={authBusy}
-                >
-                  <GoogleIcon />
-                  <span>Google</span>
-                </button>
-                <button
-                  id="btn-github-signin"
-                  className="p-social-btn"
-                  title="Continue with GitHub"
-                  onClick={handleGitHubSignIn}
-                  disabled={authBusy}
-                >
-                  <GitHubIcon />
-                  <span>GitHub</span>
-                </button>
-              </div>
-
-              <div className="p-divider">
-                <span>or</span>
-              </div>
-
-              <div className="p-field">
-                <input
-                  id="signin-email"
-                  type="email"
-                  className="p-input"
-                  placeholder="Email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  autoComplete="email"
-                />
-              </div>
-
-              <div className="p-field p-field--pw">
-                <input
-                  id="signin-password"
-                  type={showPass ? 'text' : 'password'}
-                  className="p-input"
-                  placeholder="Password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
-                />
-                <button className="p-pw-toggle" onClick={() => setShowPass(v => !v)} type="button">
-                  {showPass ? '🙈' : '👁'}
-                </button>
-              </div>
-
-              {/* Error display */}
-              {authError && (
-                <div className="p-status p-status--err" style={{ marginBottom: '4px' }}>
-                  {authError}
-                </div>
-              )}
-
-              <button
-                id="btn-email-auth"
-                className="p-btn p-btn--primary p-btn--full"
-                onClick={handleEmailAuth}
-                disabled={authBusy}
-              >
-                {authBusy ? '…' : isRegistering ? 'Create account' : 'Sign in'}
-              </button>
-
-              <button
-                className="p-toggles-trigger"
-                style={{ marginTop: '6px' }}
-                onClick={() => {
-                  setIsRegistering(v => !v);
-                  setAuthError(null);
-                }}
-              >
-                {isRegistering ? 'Already have an account? Sign in' : 'No account? Create one'}
-              </button>
-
-              <p className="p-footnote">
-                Sign-in syncs your API keys and settings across devices.
-              </p>
-            </>
           )}
         </div>
       )}
@@ -712,15 +408,17 @@ export default function Popup() {
           </div>
 
           {/* Cloud sync nudge */}
-          {!firebaseUser && (
+          {!isLinked && (
             <div style={{ fontSize: '11px', color: '#6b6b8a', marginBottom: '6px' }}>
               💡{' '}
-              <button
-                style={{ background: 'none', border: 'none', color: '#a5b4fc', cursor: 'pointer', fontSize: '11px', padding: 0 }}
-                onClick={() => setTab('signin')}
+              <a
+                href="https://huh.app"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: '#a5b4fc', textDecoration: 'none' }}
               >
-                Sign in
-              </button>
+                Sign in at huh.app
+              </a>
               {' '}to sync keys across devices.
             </div>
           )}
@@ -734,7 +432,7 @@ export default function Popup() {
 
           {/* Save */}
           <button className="p-btn p-btn--primary p-btn--full" onClick={handleSave}>
-            Save{firebaseUser ? ' & Sync' : ''}
+            Save
           </button>
 
           {/* ── Toggles (collapsible) ── */}

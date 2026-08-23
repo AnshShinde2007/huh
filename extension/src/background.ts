@@ -442,3 +442,17 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     return true; // Keep message channel open for async response
   }
 });
+
+// Listen to message from external web page (landing page)
+chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+  if (request.type === 'AUTH_SUCCESS') {
+    const { token } = request.payload;
+    // We can store the token or just store the fact we are authenticated
+    // For now, let's just forward it to popup via storage or sign in
+    // Since we are moving Auth out of the popup, we can just save it to storage
+    chrome.storage.local.set({ authToken: token }, () => {
+      sendResponse({ success: true });
+    });
+    return true;
+  }
+});
