@@ -8,7 +8,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+.env
+.env.local
+.env.*.local
+dist-chrome
+dist-firefox
 dist-ssr
 *.local
 

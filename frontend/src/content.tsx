@@ -25,6 +25,7 @@ interface Rect {
 function FloatingManager() {
   const [showTriggerSetting, setShowTriggerSetting] = useState(true);
   const [enableAltClickSetting, setEnableAltClickSetting] = useState(true);
+  const [cardPositionSetting, setCardPositionSetting] = useState<'selection' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>('selection');
   
   const [uiState, setUiState] = useState<UIState>('IDLE');
   const [selectionText, setSelectionText] = useState('');
@@ -37,14 +38,41 @@ function FloatingManager() {
   
   const activeLookupRef = useRef<string | null>(null);
 
+  // Dragging state
+  const [cardPosition, setCardPosition] = useState<{ left: number; top: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, cardLeft: 0, cardTop: 0 });
+
   // Load interaction settings from local storage
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['showTrigger', 'enableAltClick'], (result) => {
+      chrome.storage.local.get(['showTrigger', 'enableAltClick', 'cardPositionSetting'], (result) => {
         if (result.showTrigger !== undefined) setShowTriggerSetting(result.showTrigger);
         if (result.enableAltClick !== undefined) setEnableAltClickSetting(result.enableAltClick);
+        if (result.cardPositionSetting !== undefined) setCardPositionSetting(result.cardPositionSetting);
       });
     }
+  }, []);
+
+  // Listen to live settings changes from storage
+  useEffect(() => {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.onChanged) return;
+    
+    const handleStorageChange = (changes: { [key: string]: any }, areaName: string) => {
+      if (areaName !== 'local') return;
+      if (changes.showTrigger) {
+        setShowTriggerSetting(changes.showTrigger.newValue);
+      }
+      if (changes.enableAltClick) {
+        setEnableAltClickSetting(changes.enableAltClick.newValue);
+      }
+      if (changes.cardPositionSetting) {
+        setCardPositionSetting(changes.cardPositionSetting.newValue);
+      }
+    };
+    
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
   }, []);
 
   // Semantic block-level elements that provide meaningful context
@@ -182,6 +210,7 @@ function FloatingManager() {
     setErrorMessage('');
     setExplanation(null);
     setIsCached(false);
+    setCardPosition(null);
     
     activeLookupRef.current = text;
     
@@ -244,6 +273,7 @@ function FloatingManager() {
         if (!text) {
           if (uiState === 'TRIGGER_SHOWING') {
             setUiState('IDLE');
+            setCardPosition(null);
           }
           return;
         }
@@ -358,6 +388,7 @@ function FloatingManager() {
       if (shadowHost && path.includes(shadowHost)) return;
       
       setUiState('IDLE');
+      setCardPosition(null);
     };
 
     document.addEventListener('mousedown', handleDismiss);
@@ -374,7 +405,7 @@ function FloatingManager() {
     };
   };
 
-  const getCardPosition = () => {
+  const getCardPositionCoords = () => {
     let cardX = selectionRect.left;
     let cardY = selectionRect.bottom + 8; // 8px gap below selection
     
@@ -393,10 +424,127 @@ function FloatingManager() {
       cardY = selectionRect.top - estimatedCardHeight - 8;
     }
     
+    return { left: cardX, top: cardY };
+  };
+
+  const getCardPosition = () => {
+    const coords = getCardPositionCoords();
     return {
-      left: `${cardX}px`,
-      top: `${cardY}px`
+      left: `${coords.left}px`,
+      top: `${coords.top}px`
     };
+  };
+
+  const getCurrentCardStyle = () => {
+    if (cardPosition) {
+      return {
+        left: `${cardPosition.left}px`,
+        top: `${cardPosition.top}px`,
+        transform: 'none',
+        animation: 'none'
+      };
+    }
+
+    switch (cardPositionSetting) {
+      case 'top-left':
+        return {
+          left: '16px',
+          top: '16px',
+          right: 'auto',
+          bottom: 'auto',
+          transform: 'none'
+        };
+      case 'top-right':
+        return {
+          right: '16px',
+          top: '16px',
+          left: 'auto',
+          bottom: 'auto',
+          transform: 'none'
+        };
+      case 'bottom-left':
+        return {
+          left: '16px',
+          bottom: '16px',
+          top: 'auto',
+          right: 'auto',
+          transform: 'none'
+        };
+      case 'bottom-right':
+        return {
+          right: '16px',
+          bottom: '16px',
+          left: 'auto',
+          top: 'auto',
+          transform: 'none'
+        };
+      case 'selection':
+      default:
+        return getCardPosition();
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return; // only left click
+
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === 'BUTTON' ||
+      target.tagName === 'A' ||
+      target.closest('.huh-close-btn') ||
+      target.closest('.huh-retry-btn')
+    ) {
+      return;
+    }
+
+    if (target.closest('.huh-description')) {
+      return;
+    }
+
+    e.preventDefault();
+    setIsDragging(true);
+
+    let startLeft = 0;
+    let startTop = 0;
+    if (cardPosition) {
+      startLeft = cardPosition.left;
+      startTop = cardPosition.top;
+    } else {
+      const pos = getCardPositionCoords();
+      startLeft = pos.left;
+      startTop = pos.top;
+    }
+
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      cardLeft: startLeft,
+      cardTop: startTop
+    };
+
+    target.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+
+    const deltaX = e.clientX - dragStartRef.current.mouseX;
+    const deltaY = e.clientY - dragStartRef.current.mouseY;
+
+    let newLeft = dragStartRef.current.cardLeft + deltaX;
+    let newTop = dragStartRef.current.cardTop + deltaY;
+
+    const cardWidth = 290;
+    newLeft = Math.max(8, Math.min(window.innerWidth - cardWidth - 8, newLeft));
+    newTop = Math.max(8, Math.min(window.innerHeight - 40, newTop));
+
+    setCardPosition({ left: newLeft, top: newTop });
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
   return (
@@ -412,7 +560,13 @@ function FloatingManager() {
       )}
 
       {(uiState === 'LOADING' || uiState === 'EXPLAINED' || uiState === 'ERROR') && (
-        <div className="huh-card" style={getCardPosition()}>
+        <div 
+          className={`huh-card ${isDragging ? 'huh-dragging' : ''}`} 
+          style={getCurrentCardStyle()}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+        >
           <button className="huh-close-btn" onClick={() => setUiState('IDLE')}>
             &times;
           </button>

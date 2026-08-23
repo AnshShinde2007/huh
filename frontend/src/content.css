@@ -28,15 +28,15 @@
 .huh-trigger-btn {
   position: fixed;
   z-index: 2147483647;
-  background: linear-gradient(135deg, #6366f1, #ec4899);
-  color: white;
-  border: none;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #ffffff;
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 5px 11px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   transform: translateY(-8px);
   animation: huh-bounceIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   transition: all 0.2s ease;
@@ -46,8 +46,11 @@
 }
 
 .huh-trigger-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #000000;
   transform: translateY(-9px) scale(1.05);
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .huh-trigger-btn:active {
@@ -72,6 +75,15 @@
   transform: translateY(8px);
   animation: huh-slideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
+  cursor: grab;
+  touch-action: none;
+}
+
+.huh-card.huh-dragging {
+  cursor: grabbing;
+  user-select: none;
+  animation: none !important;
+  transition: none !important;
 }
 
 .huh-card * {
@@ -150,6 +162,7 @@
   font-size: 13px;
   color: var(--huh-text-desc);
   line-height: 1.45;
+  cursor: auto;
 }
 
 /* Footer / metadata cache indicator */

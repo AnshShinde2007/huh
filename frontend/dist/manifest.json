@@ -7,13 +7,13 @@
     "default_popup": "index.html"
   },
   "background": {
-    "service_worker": "src/background.ts",
+    "service_worker": "service-worker-loader.js",
     "type": "module"
   },
   "content_scripts": [
     {
       "js": [
-        "src/content.tsx"
+        "assets/content.tsx-loader-1wS-B9UL.js"
       ],
       "matches": [
         "<all_urls>"
@@ -30,5 +30,17 @@
     "https://openrouter.ai/*",
     "https://api.x.ai/*",
     "https://api.groq.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/jsx-runtime-BRsvpbrG.js",
+        "assets/content.tsx-_AiXbwjF.js"
+      ],
+      "use_dynamic_url": false
+    }
   ]
 }
